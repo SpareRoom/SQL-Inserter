@@ -9,7 +9,7 @@ use Exporter 'import';
 
 =head1 NAME
 
-SQL::Inserter - Fast buffered SQL/DBI inserts
+SQL::Inserter - Fast insert SQL builder, buffered DBI inserting
 
 =head1 VERSION
 
@@ -27,7 +27,7 @@ our @EXPORT_OK = qw(simple_insert multi_insert_sql);
 
   my $sql = SQL::Inserter->new(
     dbh    => $dbh,
-    table  => 'table_name',
+    table  => 'table',
     cols   => [qw/column1 column2.../]?,
     buffer => 100?                       # No. of rows for multi-row insert
   );
@@ -43,16 +43,20 @@ our @EXPORT_OK = qw(simple_insert multi_insert_sql);
     ...
   });
 
-  # There are also functions to simply create a statement and its bind vars
-  # Single row
+  # There are also functions to just get the SQL statement and its bind vars
+  # similar to SQL::Abstract or SQL::Maker insert, but with much less overhead:
   my ($sql, @bind) = simple_insert($table, {col1=>$val...});
-  # Multi-row
+
+  # Multi-row variant:
   my ($sql, @bind) = simple_insert($table, [{col1=>$row1_val...},{col1=>$row2_val...},...]);
+
+  # Or, construct an SQL statement with placeholders for a given number of rows:
+  my $sql = multi_insert_sql('table', [qw/col1 col2.../], $num_of_rows);
 
 =head1 DESCRIPTION
 
-SQL::Inserter's main OO interface will let you do L<DBI> inserts as efficiently as
-possible by managing a multi-row buffer and prepared statements.
+SQL::Inserter's main lightweight OO interface will let you do L<DBI> inserts as
+efficiently as possible by managing a multi-row buffer and prepared statements.
 
 You only have to select the number of rows for the buffered writes (default is 100)
 and choose whether to pass your data in arrays (fastest, requires all data to be bind
@@ -76,7 +80,7 @@ On request: C<simple_insert> C<multi_insert_sql>.
     cols       => \@column_names?,
     buffer     => 100?,
     duplicates => $ignore_or_update?,
-    null_undef => $convert_undef_to_NULL
+    null_undef => $convert_undef_to_NULL?
   );
 
 Creates an object to insert data to a specific table. Buffering is enabled by default
@@ -103,7 +107,7 @@ if they are defined). See L</"NOTES"> if you are using any restricted words for
 column names.
 
 =item * C<buffer> : Max number of rows to be held in buffer before there is a write.
-The buffer empties (writes contents) when the object is destroyed. Setting it to 1
+The buffer flushes (writes contents) when the object is destroyed. Setting it to 1
 writes each row separately (least efficient). For small rows you can set buffer to
 thousands. The default is a (conservative) 100 which works with big data rows.
 
@@ -158,16 +162,17 @@ sub new {
 
 The main insert method. It works in two modes, by passing an array or a hashref:
 
-=head4 Array mode
+=head3 Array mode
 
 Pass the data for one or more rows in a flat array, buffering will work automatically
 based on your C<buffer> settings. Obviously your C<@column_data_array> has to contain
 a multiple of the number of C<cols> defined on the constructor.
 
-This is the fastest mode, but it only allows simple bind values (not even C<NULL> - 
-C<undef>s will be directly passed to DBI->execute);
+This is the fastest mode, but it only allows simple bind values. Any undefined values
+will be passed directly to DBI->execute, which may or may not be what you expect -
+there will not be any explicit conversion to SQL C<NULL>.
 
-=head4 Hash mode
+=head3 Hash mode
 
 Pass a reference to a hash containing the column names & values for a single row
 of data. If C<cols> was not defined on the constructor, the columns from the first
@@ -175,17 +180,17 @@ data row will be used instead. For subsequent rows any extra columns will be dis
 and any missing columns will be considered to have an C<undef> (which can be
 automatically converted to C<NULL> if the C<null_undef> option was set).
 
-=head4 Emptying buffer
+=head3 Flushing the buffer
 
-Calling C<insert> with no arguments forces a write to the db, emptying the buffer.
+Calling C<insert> with no arguments forces a write to the db, flushing the buffer.
 You don't have to call this manually, the same will happen when the object is destroyed.
 
-=head4 Mixing modes
+=head3 Mixing modes
 
 You can theoretically mix modes, but only when the buffer is empty e.g. you can start
-with the array mode, empty the buffer and continue with hash mode (C<cols> will be
+with the array mode, flush the buffer and continue with hash mode (C<cols> will be
 defined from the array mode). Or you can start with hash mode (so C<cols> will be defined
-from the very first hash), and after emptying the buffer you can switch to array mode.
+from the very first hash), and after flushing the buffer you can switch to array mode.
 
 =cut
 
@@ -257,7 +262,7 @@ Check how many un-inserted data rows the buffer currently holds.
   my ($sql, @bind) = simple_insert($table, \%fieldvals, \%options);
 
   # Multi-row
-  my ($sql, @bind) = simple_insert($table, [\%fieldvals,...], \%options);
+  my ($sql, @bind) = simple_insert($table, [\%fieldvals_row1,...], \%options);
 
 Returns the SQL statement and bind variable array for a hash containing the row
 columns and values. Values are treated as bind variables unless they are references
@@ -524,6 +529,32 @@ Note that as of MySQL 8.0.20 the C<VALUES> in C<UPDATE> is deprecated (row alias
 used instead), so this functionality might need to be updated some day if C<VALUES> is
 removed completely.
 
+=head2 Performance
+
+The OO interface has minimal overhead. The only consideration is that if your rows
+do not contain particularly large amounts of data, you may want to increase the buffer
+size which is at a modest 100 rows.
+
+Internally, to construct the prepared statements it uses similar logic to the public
+functions. C<simple_insert> is of particular interest as it is a minimalistic function
+that may replace (similar interface / feature set) the C<insert> functions from
+C<SQL::Abstract> or C<SQL::Maker> while being over 40x faster than the former and
+around 3x faster than the latter. The included C<bench/benchmark.pl> script gives
+an idea (results on an M1 Pro Macbook):
+
+ Compare SQL::Abstract, SQL::Maker, simple_insert:
+                     Rate Abstract Abstract cached Maker Maker cached simple_insert
+ Abstract          4207/s       --             -6%  -90%         -91%          -98%
+ Abstract cached   4482/s       7%              --  -90%         -90%          -98%
+ Maker            44245/s     952%            887%    --          -4%          -76%
+ Maker cached     46205/s     998%            931%    4%           --          -75%
+ simple_insert   187398/s    4355%           4081%  324%         306%            --
+ 
+ Compare simple_insert, multi_insert_sql for single row:
+                      Rate    simple_insert multi_insert_sql
+ simple_insert    190037/s               --             -76%
+ multi_insert_sql 797596/s             320%               --
+
 =head1 AUTHOR
 
 Dimitrios Kechagias, C<< <dkechag at cpan.org> >>
@@ -539,11 +570,9 @@ I will be notified, and then you'll automatically be notified of progress on you
 
 L<https://github.com/SpareRoom/SQL-Inserter>
 
-
 =head1 CPAN
 
-L<https://metacpan.org/release/SQL-Inserter>
-
+L<https://metacpan.org/pod/SQL::Inserter>
 
 =head1 LICENSE AND COPYRIGHT
 

@@ -1,6 +1,6 @@
 SQL-Inserter
 
-SQL::Inserter - Fast buffered SQL/DBI inserts
+SQL::Inserter - Fast insert SQL builder, buffered DBI inserting
 
 INSTALLATION
 
@@ -8,7 +8,7 @@ Normally you would expect to use a package manager like cpanm to install as:
 
     cpanm SQL::Inserter
 
-But to install this module manually, run the following commands:
+Otherwise, to install this module manually, run the following commands:
 
 	perl Makefile.PL
 	make
