@@ -33,10 +33,7 @@ our @EXPORT_OK = qw(simple_insert multi_insert_sql);
   );
 
   # Fastest method: pass single or multiple rows of data as an array
-  $sql->insert(@cols);
-
-  # For bulk updates, call insert with no 
-  $sql->insert();
+  $sql->insert($col1_row1, $col2_row1, $col1_row2...);
 
   # Alternative, pass a single row as a hash, allows SQL code
   # instead of values (pass reference)
@@ -45,6 +42,12 @@ our @EXPORT_OK = qw(simple_insert multi_insert_sql);
     column2 => \'NOW()',
     ...
   });
+
+  # There are also functions to simply create a statement and its bind vars
+  # Single row
+  my ($sql, @bind) = simple_insert($table, {col1=>$val...});
+  # Multi-row
+  my ($sql, @bind) = simple_insert($table, [{col1=>$row1_val...},{col1=>$row2_val...},...]);
 
 =head1 DESCRIPTION
 
