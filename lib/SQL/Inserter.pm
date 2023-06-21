@@ -162,7 +162,9 @@ sub new {
 
 The main insert method. It works in two modes, by passing an array or a hashref:
 
-=head3 Array mode
+=over 4
+
+=item Array mode
 
 Pass the data for one or more rows in a flat array, buffering will work automatically
 based on your C<buffer> settings. Obviously your C<@column_data_array> has to contain
@@ -172,7 +174,7 @@ This is the fastest mode, but it only allows simple bind values. Any undefined v
 will be passed directly to DBI->execute, which may or may not be what you expect -
 there will not be any explicit conversion to SQL C<NULL>.
 
-=head3 Hash mode
+=item Hash mode
 
 Pass a reference to a hash containing the column names & values for a single row
 of data. If C<cols> was not defined on the constructor, the columns from the first
@@ -180,17 +182,19 @@ data row will be used instead. For subsequent rows any extra columns will be dis
 and any missing columns will be considered to have an C<undef> (which can be
 automatically converted to C<NULL> if the C<null_undef> option was set).
 
-=head3 Flushing the buffer
+=item Flushing the buffer
 
 Calling C<insert> with no arguments forces a write to the db, flushing the buffer.
 You don't have to call this manually, the same will happen when the object is destroyed.
 
-=head3 Mixing modes
+=item Mixing modes
 
 You can theoretically mix modes, but only when the buffer is empty e.g. you can start
 with the array mode, flush the buffer and continue with hash mode (C<cols> will be
 defined from the array mode). Or you can start with hash mode (so C<cols> will be defined
 from the very first hash), and after flushing the buffer you can switch to array mode.
+
+=back
 
 =cut
 
@@ -232,7 +236,7 @@ sub insert {
 
 =head1 ATTRIBUTES
 
-=head2 last_retval
+=head2 C<last_retval>
 
   my $val = $sql->{last_retval}
 
@@ -240,7 +244,7 @@ The return value of the last DBI C<execute()> is stored in this attribute. On a 
 insert it should contain the number of rows of that statement. Note that an C<insert>
 call, depending on the buffering, may call C<execute()> zero, one or more times.
 
-=head2 row_total
+=head2 C<row_total>
 
   my $total = $sql->{row_total}
 
@@ -248,7 +252,7 @@ Basically a running total of the return values, for successful inserts it shows 
 how many rows were inserted into the database. It will be undef if no C<execute()> has
 been called.
 
-=head2 buffer_counter
+=head2 C<buffer_counter>
 
   my $count = $sql->{buffer_counter}
 
@@ -376,7 +380,7 @@ sub _hash_insert {
         if $self->{buffer_counter} && !$self->{hash_buffer};
 
     $self->{buffer_counter}++;
-    $self->{cols} //= [keys %$fields];
+    $self->{cols} = [keys %$fields] if !defined($self->{cols});
     my ($row, @bind) = _row_placeholders($fields, $self->{cols}, $self->{null});
     push @{$self->{hash_buffer}}, $row;
     push @{$self->{bind}}, @bind;
@@ -387,9 +391,10 @@ sub _hash_insert {
 sub _write_full_buffer {
     my $self = shift;
 
-    $self->{full_buffer_insert} //= $self->_prepare_full_buffer_insert();
-    $self->_execute($self->{full_buffer_insert});
+    $self->{full_buffer_insert} = $self->_prepare_full_buffer_insert()
+        if !$self->{full_buffer_insert};
 
+    $self->_execute($self->{full_buffer_insert});
     $self->_cleanup();
 }
 
@@ -435,7 +440,7 @@ sub _execute {
     my $self = shift;
     my $sth  = shift;
 
-    $self->{row_total} //= 0;
+    $self->{row_total}   = 0 if !defined($self->{row_total});
     $self->{last_retval} = $sth->execute(@{$self->{bind}});
     $self->{row_total} += $self->{last_retval} if $self->{last_retval};
 }
