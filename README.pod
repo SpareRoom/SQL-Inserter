@@ -1,6 +1,6 @@
 =head1 NAME
 
-SQL::Inserter - Fast insert SQL builder, buffered DBI inserting
+SQL::Inserter - Efficient buffered DBI inserter and fast INSERT SQL builder
 
 =head1 VERSION
 
@@ -20,8 +20,12 @@ Version 0.01
   # Fastest method: pass single or multiple rows of data as an array
   $sql->insert($col1_row1, $col2_row1, $col1_row2...);
 
-  # Alternative, pass a single row as a hash, allows SQL code
-  # instead of values (pass reference)
+  # You can manually flush the buffer at any time with no argument on insert
+  # (otherwise there is auto-flush on the object's destruction)
+  $sql->insert();
+
+  # Alternative, pass a single row as a hash, allows SQL code passed as references
+  # instead of values
   $sql->insert({
     column1 => $data1,
     column2 => \'NOW()',
@@ -113,17 +117,22 @@ db settings.
 =head2 insert
 
   # Fastest array method. Only bind data is passed.
-  $sql->insert(@column_data_array);
+  my $ret = $sql->insert(@column_data_array);
 
   # Alternative, allows SQL code as values in addition to bind variables
-  $sql->insert(\%row_data);
+  my $ret = $sql->insert(\%row_data);
 
   # No parameters will force emtying of buffer (db write)
-  $sql->insert();
+  my $ret = $sql->insert();
 
-The main insert method. It works in two modes, by passing an array or a hashref:
+The main insert method. Returns the return value of the last C<execute> statement
+if there was one called, 0 otherwise (buffer not full.
 
-=head3 Array mode
+It works in two main modes, by passing an array or a hashref:
+
+=over 4
+
+=item Array mode
 
 Pass the data for one or more rows in a flat array, buffering will work automatically
 based on your C<buffer> settings. Obviously your C<@column_data_array> has to contain
@@ -133,7 +142,7 @@ This is the fastest mode, but it only allows simple bind values. Any undefined v
 will be passed directly to DBI->execute, which may or may not be what you expect -
 there will not be any explicit conversion to SQL C<NULL>.
 
-=head3 Hash mode
+=item Hash mode
 
 Pass a reference to a hash containing the column names & values for a single row
 of data. If C<cols> was not defined on the constructor, the columns from the first
@@ -141,21 +150,24 @@ data row will be used instead. For subsequent rows any extra columns will be dis
 and any missing columns will be considered to have an C<undef> (which can be
 automatically converted to C<NULL> if the C<null_undef> option was set).
 
-=head3 Flushing the buffer
+=item Flushing the buffer
 
 Calling C<insert> with no arguments forces a write to the db, flushing the buffer.
-You don't have to call this manually, the same will happen when the object is destroyed.
+You don't have to call this manually as the buffer will be flushed when the object
+is destroyed (e.g. your object falls out of scope).
 
-=head3 Mixing modes
+=item Mixing modes
 
 You can theoretically mix modes, but only when the buffer is empty e.g. you can start
 with the array mode, flush the buffer and continue with hash mode (C<cols> will be
 defined from the array mode). Or you can start with hash mode (so C<cols> will be defined
 from the very first hash), and after flushing the buffer you can switch to array mode.
 
+=back
+
 =head1 ATTRIBUTES
 
-=head2 last_retval
+=head2 C<last_retval>
 
   my $val = $sql->{last_retval}
 
@@ -163,7 +175,7 @@ The return value of the last DBI C<execute()> is stored in this attribute. On a 
 insert it should contain the number of rows of that statement. Note that an C<insert>
 call, depending on the buffering, may call C<execute()> zero, one or more times.
 
-=head2 row_total
+=head2 C<row_total>
 
   my $total = $sql->{row_total}
 
@@ -171,7 +183,7 @@ Basically a running total of the return values, for successful inserts it shows 
 how many rows were inserted into the database. It will be undef if no C<execute()> has
 been called.
 
-=head2 buffer_counter
+=head2 C<buffer_counter>
 
   my $count = $sql->{buffer_counter}
 
@@ -273,6 +285,18 @@ Note that as of MySQL 8.0.20 the C<VALUES> in C<UPDATE> is deprecated (row alias
 used instead), so this functionality might need to be updated some day if C<VALUES> is
 removed completely.
 
+=head2 Output whitespace
+
+No spaces are added to the output string beyond the minimum. However, there is a new
+line (C<\n>) added for each row of value placeholders - mainly to easily count the
+number of rows from the string.
+Also, the C<ON DUPLICATE KEY UPDATE> clause is on a new line.
+
+=head2 Error handling
+
+The module does not do any error handling on C<prepare>/C<execute> statements,
+you should use L<DBI>'s C<RaiseError> and C<HandleErrror>.
+
 =head2 Performance
 
 The OO interface has minimal overhead. The only consideration is that if your rows
@@ -320,7 +344,7 @@ L<https://metacpan.org/pod/SQL::Inserter>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (C) 2023, SpareRoom.com
+Copyright (C) 2023, SpareRoom
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

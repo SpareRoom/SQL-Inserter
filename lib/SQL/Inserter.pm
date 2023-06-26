@@ -9,7 +9,7 @@ use Exporter 'import';
 
 =head1 NAME
 
-SQL::Inserter - Fast insert SQL builder, buffered DBI inserting
+SQL::Inserter - Efficient buffered DBI inserter and fast INSERT SQL builder
 
 =head1 VERSION
 
@@ -35,8 +35,12 @@ our @EXPORT_OK = qw(simple_insert multi_insert_sql);
   # Fastest method: pass single or multiple rows of data as an array
   $sql->insert($col1_row1, $col2_row1, $col1_row2...);
 
-  # Alternative, pass a single row as a hash, allows SQL code
-  # instead of values (pass reference)
+  # You can manually flush the buffer at any time with no argument on insert
+  # (otherwise there is auto-flush on the object's destruction)
+  $sql->insert();
+
+  # Alternative, pass a single row as a hash, allows SQL code passed as references
+  # instead of values
   $sql->insert({
     column1 => $data1,
     column2 => \'NOW()',
@@ -152,15 +156,18 @@ sub new {
 =head2 insert
 
   # Fastest array method. Only bind data is passed.
-  $sql->insert(@column_data_array);
+  my $ret = $sql->insert(@column_data_array);
 
   # Alternative, allows SQL code as values in addition to bind variables
-  $sql->insert(\%row_data);
+  my $ret = $sql->insert(\%row_data);
 
   # No parameters will force emtying of buffer (db write)
-  $sql->insert();
+  my $ret = $sql->insert();
 
-The main insert method. It works in two modes, by passing an array or a hashref:
+The main insert method. Returns the return value of the last C<execute> statement
+if there was one called, 0 otherwise (buffer not full.
+
+It works in two main modes, by passing an array or a hashref:
 
 =over 4
 
@@ -185,7 +192,8 @@ automatically converted to C<NULL> if the C<null_undef> option was set).
 =item Flushing the buffer
 
 Calling C<insert> with no arguments forces a write to the db, flushing the buffer.
-You don't have to call this manually, the same will happen when the object is destroyed.
+You don't have to call this manually as the buffer will be flushed when the object
+is destroyed (e.g. your object falls out of scope).
 
 =item Mixing modes
 
@@ -203,7 +211,7 @@ sub insert {
 
     return $self->_hash_insert(@_) if $_[0] and ref($_[0]);
 
-
+    my $ret = 0;
     if (@_) {
 
         croak("Calling insert without a hash requires cols defined in constructor")
@@ -227,11 +235,12 @@ sub insert {
                 push @{$self->{bind}}, splice(@_);
                 $self->{buffer_counter} += $rows;
             }
-            $self->_write_full_buffer() if $self->{buffer_counter} == $self->{buffer};
+            $ret = $self->_write_full_buffer() if $self->{buffer_counter} == $self->{buffer};
         }
     } elsif ($self->{buffer_counter}) { # Empty the buffer
-        $self->_empty_buffer();
+        $ret = $self->_empty_buffer();
     }
+    return $ret;
 }
 
 =head1 ATTRIBUTES
@@ -365,7 +374,7 @@ sub multi_insert_sql {
     return unless $table && $columns && @$columns;
 
     my $placeholders =
-        join(',', ('(' . join(',', ('?') x @$columns) . ')') x $num_rows);
+        join(",\n", ('(' . join(',', ('?') x @$columns) . ')') x $num_rows);
 
     return _create_insert_sql($table, $columns, $placeholders, $dupe);
 }
@@ -375,6 +384,7 @@ sub multi_insert_sql {
 sub _hash_insert {
     my $self   = shift;
     my $fields = shift;
+    my $ret    = 0;
 
     croak("Insert was previously called with an array argument (still in buffer)")
         if $self->{buffer_counter} && !$self->{hash_buffer};
@@ -385,7 +395,9 @@ sub _hash_insert {
     push @{$self->{hash_buffer}}, $row;
     push @{$self->{bind}}, @bind;
 
-    $self->_write_hash_buffer() if $self->{buffer_counter} == $self->{buffer};
+    $ret = $self->_write_hash_buffer() if $self->{buffer_counter} == $self->{buffer};
+
+    return $ret;
 }
 
 sub _write_full_buffer {
@@ -396,6 +408,8 @@ sub _write_full_buffer {
 
     $self->_execute($self->{full_buffer_insert});
     $self->_cleanup();
+
+    return $self->{last_retval};
 }
 
 sub _prepare_full_buffer_insert {
@@ -411,7 +425,7 @@ sub _empty_buffer {
     return $self->_write_hash_buffer() if $self->{hash_buffer};
 
     my $rows = scalar(@{$self->{bind}}) / scalar @{$self->{cols}};
-    my $sth = $self->{dbh}->prepare(
+    my $sth  = $self->{dbh}->prepare(
         multi_insert_sql(
              $self->{table},
              $self->{cols},
@@ -421,6 +435,8 @@ sub _empty_buffer {
     );
     $self->_execute($sth);
     $self->_cleanup();
+
+    return $self->{last_retval};
 }
 
 sub _write_hash_buffer {
@@ -434,6 +450,8 @@ sub _write_hash_buffer {
     );
     $self->_execute($sth);
     $self->_cleanup();
+
+    return $self->{last_retval};
 }
 
 sub _execute {
@@ -472,7 +490,7 @@ sub _create_insert_sql {
 
     $sql .= _on_duplicate_key_update($columns) if $dupe eq 'update';
 
-    return "$sql;";
+    return $sql;
 }
 
 sub _row_placeholders {
@@ -534,6 +552,18 @@ Note that as of MySQL 8.0.20 the C<VALUES> in C<UPDATE> is deprecated (row alias
 used instead), so this functionality might need to be updated some day if C<VALUES> is
 removed completely.
 
+=head2 Output whitespace
+
+No spaces are added to the output string beyond the minimum. However, there is a new
+line (C<\n>) added for each row of value placeholders - mainly to easily count the
+number of rows from the string.
+Also, the C<ON DUPLICATE KEY UPDATE> clause is on a new line.
+
+=head2 Error handling
+
+The module does not do any error handling on C<prepare>/C<execute> statements,
+you should use L<DBI>'s C<RaiseError> and C<HandleErrror>.
+
 =head2 Performance
 
 The OO interface has minimal overhead. The only consideration is that if your rows
@@ -581,7 +611,7 @@ L<https://metacpan.org/pod/SQL::Inserter>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (C) 2023, SpareRoom.com
+Copyright (C) 2023, SpareRoom
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

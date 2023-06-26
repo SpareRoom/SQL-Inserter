@@ -31,10 +31,10 @@ subtest '_on_duplicate_key_update' => sub {
 
 subtest '_create_insert_sql' => sub {
     my @tests = (
-        [['table', [qw/foo bar/], '(?,?)'], "INSERT INTO table (foo,bar)\nVALUES (?,?);"],
-        [['table', [qw/foo bar/], '(?,?)', 'ignore'], "INSERT IGNORE INTO table (foo,bar)\nVALUES (?,?);"],
-        [['table', [qw/foo bar/], '(?,?)', 'update'], "INSERT INTO table (foo,bar)\nVALUES (?,?)\nON DUPLICATE KEY UPDATE foo=VALUES(foo),bar=VALUES(bar);"],
-        [['table', ["foo"], '(?)'], "INSERT INTO table (foo)\nVALUES (?);"],
+        [['table', [qw/foo bar/], '(?,?)'], "INSERT INTO table (foo,bar)\nVALUES (?,?)"],
+        [['table', [qw/foo bar/], '(?,?)', 'ignore'], "INSERT IGNORE INTO table (foo,bar)\nVALUES (?,?)"],
+        [['table', [qw/foo bar/], '(?,?)', 'update'], "INSERT INTO table (foo,bar)\nVALUES (?,?)\nON DUPLICATE KEY UPDATE foo=VALUES(foo),bar=VALUES(bar)"],
+        [['table', ["foo"], '(?)'], "INSERT INTO table (foo)\nVALUES (?)"],
     );
     foreach my $test (@tests) {
         is(SQL::Inserter::_create_insert_sql(@{$test->[0]}), $test->[1], "Statements match");

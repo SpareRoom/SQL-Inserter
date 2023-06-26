@@ -33,4 +33,16 @@ subtest 'insert' => sub {
     like(dies {$sql->insert(1,2)}, qr/hash/, "Wrong mode again");
 };
 
+my $mock = Test2::Mock->new(
+    class => 'SQL::Inserter',
+    override => [
+        croak => sub { return 0 },
+    ],
+);
+
+subtest 'Cover croak fail' => sub {
+    ok(lives {my $sql = SQL::Inserter->new()}, "Missing dbh");
+    ok(lives {my $sql = SQL::Inserter->new(dbh=>1)}, "Missing table");
+};
+
 done_testing;
