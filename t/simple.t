@@ -35,16 +35,30 @@ subtest 'single_buffer' => sub {
 };
 
 subtest 'duplicates' => sub {
+    my $exp_ignore = ["INSERT IGNORE INTO table (col1,col2)\nVALUES (?,?)"];
+    my $exp_update = ["INSERT INTO table (col1,col2)\nVALUES (?,?)\nON DUPLICATE KEY UPDATE col1=VALUES(col1),col2=VALUES(col2)"];
+
     @prepare = ();
     my $sql = SQL::Inserter->new(dbh=>$dbh,table=>'table',cols=>[qw/col1 col2/],buffer=>1, duplicates=>'ignore');
     $sql->insert(1,2);
-    is([@prepare],["INSERT IGNORE INTO table (col1,col2)\nVALUES (?,?)"], "Prepared statement");
+    is([@prepare], $exp_ignore, "Prepared statement");
     is([@execute],[1,2], "Bind variables correct");
+
+    @prepare = ();
+    $sql->insert({col1=>1,col2=>2});
+    is([@prepare], $exp_ignore, "Prepared statement for hash insert");
+    is([@execute],[1,2], "Bind variables correct");
+
 
     @prepare = ();
     $sql = SQL::Inserter->new(dbh=>$dbh,table=>'table',cols=>[qw/col1 col2/],buffer=>1, duplicates=>'update');
     $sql->insert(1,2);
-    is([@prepare],["INSERT INTO table (col1,col2)\nVALUES (?,?)\nON DUPLICATE KEY UPDATE col1=VALUES(col1),col2=VALUES(col2)"], "Prepared statement");
+    is([@prepare],$exp_update, "Prepared statement");
+    is([@execute],[1,2], "Bind variables correct");
+
+    @prepare = ();
+    $sql->insert({col1=>1,col2=>2});
+    is([@prepare], $exp_update, "Prepared statement for hash insert");
     is([@execute],[1,2], "Bind variables correct");
 };
 

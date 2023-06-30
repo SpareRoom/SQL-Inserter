@@ -13,11 +13,11 @@ SQL::Inserter - Efficient buffered DBI inserter and fast INSERT SQL builder
 
 =head1 VERSION
 
-Version 0.01
+Version 0.02
 
 =cut
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 our @EXPORT_OK = qw(simple_insert multi_insert_sql);
 
@@ -28,8 +28,8 @@ our @EXPORT_OK = qw(simple_insert multi_insert_sql);
   my $sql = SQL::Inserter->new(
     dbh    => $dbh,
     table  => 'table',
-    cols   => [qw/column1 column2.../]?,
-    buffer => 100?                       # No. of rows for multi-row insert
+    cols   => [qw/col1 col2.../],
+    buffer => 100?   # Default buffer is 100 rows
   );
 
   # Fastest method: pass single or multiple rows of data as an array
@@ -39,8 +39,8 @@ our @EXPORT_OK = qw(simple_insert multi_insert_sql);
   # (otherwise there is auto-flush on the object's destruction)
   $sql->insert();
 
-  # Alternative, pass a single row as a hash, allows SQL code passed as references
-  # instead of values
+  # Alternative, pass a single row as a hash, allows SQL code passed as
+  # references instead of values (no need to define cols in constructor)
   $sql->insert({
     column1 => $data1,
     column2 => \'NOW()',
@@ -52,7 +52,7 @@ our @EXPORT_OK = qw(simple_insert multi_insert_sql);
   my ($sql, @bind) = simple_insert($table, {col1=>$val...});
 
   # Multi-row variant:
-  my ($sql, @bind) = simple_insert($table, [{col1=>$row1_val...},{col1=>$row2_val...},...]);
+  my ($sql, @bind) = simple_insert($table, [{col1=>$val1...},{col1=>$val2...},...]);
 
   # Or, construct an SQL statement with placeholders for a given number of rows:
   my $sql = multi_insert_sql('table', [qw/col1 col2.../], $num_of_rows);
@@ -69,6 +69,8 @@ hashes (allows SQL code apart from plain values).
 
 It also provides lightweight functions that return the SQL queries to be used manually,
 similar to C<SQL::Abstract::insert>, but much faster.
+
+C<INSERT IGNORE> and C<ON DUPLICATE KEY UPDATE> variants supported for MySQL/MariaDB.
 
 =head1 EXPORTS
 
@@ -445,7 +447,7 @@ sub _write_hash_buffer {
     my $placeh = join(",\n", @{$self->{hash_buffer}});
     my $sth    = $self->{dbh}->prepare(
         _create_insert_sql(
-            $self->{table}, $self->{cols}, $placeh, $self->{dupe}
+            $self->{table}, $self->{cols}, $placeh, $self->{dupes}
         )
     );
     $self->_execute($sth);
