@@ -179,10 +179,10 @@ sub new {
   # Fastest array method. Only bind data is passed.
   my $ret = $sql->insert(@column_data_array);
 
-  # Alternative, allows SQL code as values in addition to bind variables
+  # Alternative allows SQL code as values in addition to bind variables.
   my $ret = $sql->insert(\%row_data);
 
-  # No parameters will force emtying of buffer (db write)
+  # No parameters will force emptying of buffer (db write).
   my $ret = $sql->insert();
 
 The main insert method. Returns the return value of the last C<execute> statement
