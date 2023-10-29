@@ -118,7 +118,7 @@ create an empty string in the db or give an error depending on your column type 
 db settings.
 
 =item * C<oracle> : This is automatically set to true when an Oracle driver is
-detected (using C<$dbh-=E<gt>{Driver}->{Name}>) and the module will produce the
+detected (using C<$dbh-=E<gt>{Driver}-=E<gt>{Name}>) and the module will produce the
 Oracle C<INSERT ALL> format. Specifying it manually in the constructor will override
 the automatic detection - a false value will force the MySQL compatible multi-row
 C<INSERT INTO> syntax (which should work on Oracle 23c or newer), while a true value

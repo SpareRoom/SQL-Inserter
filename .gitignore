@@ -15,5 +15,5 @@ inc/
 nytprof.out
 pod2htm*.tmp
 pm_to_blib
-System-CPU-*
-System-CPU-*.tar.gz
+SQL-Inserter-*
+SQL-Inserter-*.tar.gz
