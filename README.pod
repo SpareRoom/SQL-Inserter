@@ -4,7 +4,7 @@ SQL::Inserter - Efficient buffered DBI inserter and fast INSERT SQL builder
 
 =head1 VERSION
 
-Version 0.02
+Version 0.03
 
 =head1 SYNOPSIS
 
@@ -57,6 +57,10 @@ similar to C<SQL::Abstract::insert>, but much faster.
 
 C<INSERT IGNORE> and C<ON DUPLICATE KEY UPDATE> variants supported for MySQL/MariaDB.
 
+Although it is developed for use in our production MySQL/MariaDB, its main functions
+will work on DBs with similar INSERT INTO multi-row syntax like Postgres. From v0.03,
+Oracle Database is also supported.
+
 =head1 EXPORTS
 
 On request: C<simple_insert> C<multi_insert_sql>.
@@ -71,7 +75,8 @@ On request: C<simple_insert> C<multi_insert_sql>.
     cols       => \@column_names?,
     buffer     => 100?,
     duplicates => $ignore_or_update?,
-    null_undef => $convert_undef_to_NULL?
+    null_undef => $convert_undef_to_NULL?,
+    oracle     => $oracle_format?
   );
 
 Creates an object to insert data to a specific table. Buffering is enabled by default
@@ -111,6 +116,13 @@ values will be converted to SQL's C<NULL> (similar to the C<SQL::Abstract> defau
 The default behaviour will leave an undef as the bind variable, which may either
 create an empty string in the db or give an error depending on your column type and
 db settings.
+
+=item * C<oracle> : This is automatically set to true when an Oracle driver is
+detected (using C<$dbh-=E<gt>{Driver}->{Name}>) and the module will produce the
+Oracle C<INSERT ALL> format. Specifying it manually in the constructor will override
+the automatic detection - a false value will force the MySQL compatible multi-row
+C<INSERT INTO> syntax (which should work on Oracle 23c or newer), while a true value
+will generate the "classic" Oracle syntax even without an Oracle driver detected.
 
 =back
 
@@ -229,15 +241,18 @@ give an error depending on your column type and db settings.
 C<INSERT IGNORE> or C<ON DUPLICATE KEY UPDATE> query respectively. See L</"NOTES">
 for details on the latter.
 
+=item * C<oracle> : Will generate the Oracle C<INSERT ALL> syntax (required for
+pre-23c Oracle Databases).
+
 =back
 
 =head2 multi_insert_sql
 
  my $sql = multi_insert_sql(
      $table,
-     \@columns,         # names of table columns
-     $num_of_rows?,     # default = 1
-     $duplicates?       # can be set as ignore/update in case of duplicate key (MySQL)
+     \@columns,      # names of table columns
+     $num_of_rows?,  # default = 1
+     $variant?       # can be set as 'ignore'/'update' on duplicate key (MySQL) or 'oracle'
  );
 
 Builds bulk insert query (single insert is possible too), with ability for
@@ -254,9 +269,10 @@ Optional parameters:
 for a single row. You can define any number of rows to use with multi-row bind
 variable arrays.
 
-=item * C<$duplicate> : For MySQL, passing C<'ignore'> as the 4th argument returns
+=item * C<$variant> : For MySQL, passing C<'ignore'> as the 4th argument returns
 an C<INSERT IGNORE> query. Passing C<'update'> as the argument returns a query
 containing an `ON DUPLICATE KEY UPDATE` clause (see L</"NOTES"> for further details).
+Passing C<'oracle'> will create the C<INSERT ALL> syntax for pre-23c Oracle DBs.
 
 =back
 
