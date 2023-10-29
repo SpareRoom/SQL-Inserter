@@ -58,8 +58,8 @@ similar to C<SQL::Abstract::insert>, but much faster.
 C<INSERT IGNORE> and C<ON DUPLICATE KEY UPDATE> variants supported for MySQL/MariaDB.
 
 Although it is developed for use in our production MySQL/MariaDB, its main functions
-will work on DBs with similar INSERT INTO multi-row syntax like Postgres. From v0.03,
-Oracle Database is also supported.
+will work on DBs with similar C<INSERT INTO> multi-row syntax like PostgreSQL.
+From v0.03, Oracle Database is also supported.
 
 =head1 EXPORTS
 
@@ -118,7 +118,7 @@ create an empty string in the db or give an error depending on your column type 
 db settings.
 
 =item * C<oracle> : This is automatically set to true when an Oracle driver is
-detected (using C<$dbh-=E<gt>{Driver}-=E<gt>{Name}>) and the module will produce the
+detected (using C<$dbh-E<gt>{Driver}-E<gt>{Name}>) and the module will produce the
 Oracle C<INSERT ALL> format. Specifying it manually in the constructor will override
 the automatic detection - a false value will force the MySQL compatible multi-row
 C<INSERT INTO> syntax (which should work on Oracle 23c or newer), while a true value
